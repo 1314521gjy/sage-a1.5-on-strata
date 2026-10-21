@@ -52,7 +52,35 @@ GET /props  → n_ctx = 262144
 OpenAI 兼容：`POST http://127.0.0.1:8193/v1/chat/completions`，模型 id `sage-a1.5-q4_k_m`。
 自带 `tokenizer/`（从 GGUF 导出，`chat_template.jinja` 在里面）。
 
-## 3. 思考循环：本仓带的补丁（`patches/0001-reasoning-loop-recovery-2029.patch`）
+## 3. 视觉（图片输入）
+
+`/health` 里 `images` 应为 `true`。做法是配置加一个 `"vision"` 段，指向 **`strata-vision`**（llama.cpp `mtmd` 的封装）
+与模型自带的 `mmproj`：
+
+```json
+"vision": {
+  "exe":   "...\\build-vision\\bin\\strata-vision.exe",
+  "mmproj": "...\\Sage-A1.5-mmproj.gguf",
+  "model": "...\\Sage-A1.5-Q4_K_M.gguf",
+  "threads": 16, "max_tokens": 1024, "min_tokens": 1024
+}
+```
+
+`strata-vision` 需要自己编（本仓不带二进制）：
+
+```powershell
+cmake -S tools/vision -B build-vision -G Ninja -DCMAKE_BUILD_TYPE=Release `
+      -DLLAMA_DIR=<llama.cpp checkout，与本机 ggml 0.24.0/3cf0325 同源> -DSTRATA_PORTABLE=OFF
+cmake --build build-vision --target strata-vision
+```
+
+实测（CPU 编码，16 线程）：768×768 图变成 **1024 个图像 token**，编码约 **9–10 s**，整条请求 12.1 s，
+回答内容与图一致。要更快就 `-DSTRATA_VISION_CUDA=ON` 编 GPU 版（0.1–0.5 s/图，约 1.4 GB 显存）。
+
+客户端侧（OpenAI 协议）就是标准的 `image_url`（base64 data URL 或 http URL）：
+本机 DSH 还要把模型的 `input` 声明成 `[text, image]`，否则界面不会让你发图。
+
+## 4. 思考循环：本仓带的补丁（`patches/0001-reasoning-loop-recovery-2029.patch`）
 
 Sage 在 greedy 下会陷入重复思考（同一段话原样重复 20+ 次），服务端 `reasoning_loop_recovery` 本该接住它，
 但上游实现有一个**静默空转**：
@@ -78,13 +106,13 @@ Sage 在 greedy 下会陷入重复思考（同一段话原样重复 20+ 次）�
 **边界（别当已修）**：只检测**单次回复内的思考重复**。内容级循环、跨请求的工具循环（如反复
 `list_agents → job_output` 报错，单请求覆盖率仅 0.224 < 阈值 0.25）都不在服务端检测范围。
 
-## 4. 一个取舍：`reasoning_budget_tokens: 0`
+## 5. 一个取舍：`reasoning_budget_tokens: 0`
 
 256K 配置用**思考无上限**（`reasoning_budget_tokens: 0`）。代价：greedy 下连 `1+1` 都可能自言自语
 2000+ token 才收敛，`max_tokens` 给小了（<3000）会全花在思考上、正文为空。
 旧的 4K/32K 配置用的是 **64 / 16**，所以秒答——那是预算截断，不是模型更快。
 
-## 5. 仓库结构
+## 6. 仓库结构
 
 ```
 configs/   sage-serve-exact-{256k,32k,b64}.json     三档 serve 配置（256K / 32K / 4K）
@@ -96,14 +124,14 @@ tokenizer/ chat_template.jinja / vocab / merges     从 GGUF 导出
 docs/      交接、循环诊断、精确线说明、DSH 接入、知识卡 0009-0012
 ```
 
-## 6. 未验
+## 7. 未验
 
 - **256K 全上下文实跑**：只起了服务（`/props` 262144），没有真发 256K prompt；32K 已实测。
-- **vision / mmproj**：未加载，`strata-vision` 版本不同步。
+- **视觉的画质/多图**：只测过一张 768×768；多图、超大图、`min_tokens` 调参未测。CUDA 编码器没编（CPU 9–10 s/图）。
 - **8 GB 显存档、KV in RAM**：未做。
 - **自然长任务循环**：把 DSH 记录的 prompt 原样回放（greedy / 0.6）都不循环，**触发条件未定位**。
 
-## 7. 出处
+## 8. 出处
 
 - 引擎：[PolyStrata](https://github.com/Niko1221/Strata)（Strata 的 `poly` 分支 fork）0.1.44.1，本仓只带补丁，不带整棵树。
 - 模型：[InternScience/Sage-A1.5](https://huggingface.co/InternScience/Sage-A1.5)，本仓不带权重。

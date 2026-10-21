@@ -11,5 +11,13 @@
  "gpu": 0,
  "gpus_asked": true,
  "reasoning_budget_tokens": 0,
- "reasoning_loop_recovery": "recover"
+ "reasoning_loop_recovery": "recover",
+ "vision": {
+  "exe": "E:\\视频\\_flashnext\\experiments\\20261015-nemotron-on-strata\\PolyStrata\\build-vision\\bin\\strata-vision.exe",
+  "mmproj": "E:\\models\\Sage-A1.5\\gguf-q4\\Sage-A1.5-mmproj.gguf",
+  "model": "E:\\models\\Sage-A1.5\\gguf-q4\\Sage-A1.5-Q4_K_M.gguf",
+  "threads": 16,
+  "max_tokens": 1024,
+  "min_tokens": 1024
+ }
 }

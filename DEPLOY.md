@@ -92,6 +92,31 @@ python .\scripts\test_sage256k.py    # 注意：max_tokens 见脚本；思考无
 
 `/props` 的 `n_ctx` 必须等于 `--max-context`；不等就是读错了配置。
 
+### 5.1 图片输入（可选）
+
+要让模型看图，配置里加 `"vision"` 段（键名：`exe` `mmproj` `model` `threads` `max_tokens` `min_tokens` `gpu`）：
+
+```json
+"vision": {
+  "exe": "...\\build-vision\\bin\\strata-vision.exe",
+  "mmproj": "...\\Sage-A1.5-mmproj.gguf",
+  "model": "...\\Sage-A1.5-Q4_K_M.gguf",
+  "threads": 16, "max_tokens": 1024, "min_tokens": 1024
+}
+```
+
+`strata-vision` 先编出来（源在 `tools/vision`）：
+
+```powershell
+cmake -S tools/vision -B build-vision -G Ninja -DCMAKE_BUILD_TYPE=Release `
+      -DLLAMA_DIR=E:\llama-cpp-pin -DSTRATA_PORTABLE=OFF
+cmake --build build-vision --target strata-vision
+```
+
+判据：重启后 `/health` 的 `images` = `true`，日志出现 `loading the vision encoder ...` 与 `images on`；
+发一张已知内容的图，回答要对得上。CPU 编码约 9–10 s/图（1024 图像 token）；要快就 `-DSTRATA_VISION_CUDA=ON`，
+代价约 1.4 GB 显存。
+
 ## 6. 踩坑清单（都真踩过）
 
 | # | 坑 | 判据 / 修法 |
