@@ -1,0 +1,25 @@
+{
+ "exe": "E:\\视频\\_flashnext\\experiments\\20261015-nemotron-on-strata\\PolyStrata\\build-p3\\strata-poly.exe",
+ "args": [
+  "--model",
+  "E:\\models\\Sage-A1.5\\gguf-q4\\Sage-A1.5-Q4_K_M.gguf",
+  "--max-context",
+  "36864",
+  "--window",
+  "4",
+  "--lookup",
+  "0"
+ ],
+ "cwd": "E:\\视频\\_flashnext\\experiments\\20261015-nemotron-on-strata\\PolyStrata",
+ "tokenizer": "E:\\models\\Sage-A1.5\\poly\\tok\\tokenizer",
+ "model_name": "sage-a1.5-q4_k_m",
+ "display_name": "Sage-A1.5 Q4_K_M (exact, 32K)",
+ "log": "E:\\models\\Sage-A1.5\\poly\\logs\\serve-exact.log",
+ "lib_dirs": [
+  "E:\\cuda-13.3\\bin\\x64"
+ ],
+ "port": 8192,
+ "gpu": 0,
+ "gpus_asked": true,
+ "reasoning_budget_tokens": 16
+}
