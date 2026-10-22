@@ -17,6 +17,7 @@ sha256 `a64fe0bbf936db3eb54f66f142c2b2eee569ade83673649f549a21daef8ca395`），
 | **上下文** | **262,144**（256K），`--max-context 262144` |
 | **EOS** | CLI 1024 预算下 **274 token 自然停**，末位 `<|im_end|>` = 248046 |
 | **并发** | `strata-poly` 单槽，2/3/4 并发 = **FIFO**，总墙钟 ≈ N×0.50 s，聚合恒 **~211 tok/s**（无并行加速） |
+| **8 GB 显存档（§9）** | **decode 58.35（带 profile 68.23）tok/s；prefill 2K 1918.3 / 8K 3388.2**，专家 2396/10240 驻留 4.3 GiB |
 
 ## 1. 什么是「精确线」
 
@@ -117,18 +118,21 @@ Sage 在 greedy 下会陷入重复思考（同一段话原样重复 20+ 次）�
 ```
 configs/   sage-serve-exact-{256k,32k,b64}.json     三档 serve 配置（256K / 32K / 4K）
 scripts/   exact.ps1                               精确线 CLI 启动器
+           run-8g.ps1                              8 GB 显存档启动器
+profile/   sage-profile-2k.bin                     专家画像（4946 条，8 GB 档用）
            test_sage256k.py                       256K 冒烟测试
 patches/   0001-reasoning-loop-recovery-2029.patch  思考循环修复（对 PolyStrata 0.1.44.1）
 serve/     test_reasoning_loop_recovery.py          循环恢复回归（20 条，CPU-only）
 tokenizer/ chat_template.jinja / vocab / merges     从 GGUF 导出
 docs/      交接、循环诊断、精确线说明、DSH 接入、知识卡 0009-0012
+           8G档-配方与读数-20261022.md · 8G档-陷阱与口径-20261022.md   8 GB 显存档
 ```
 
 ## 7. 未验
 
 - **256K 全上下文实跑**：只起了服务（`/props` 262144），没有真发 256K prompt；32K 已实测。
 - **视觉的画质/多图**：只测过一张 768×768；多图、超大图、`min_tokens` 调参未测。CUDA 编码器没编（CPU 9–10 s/图）。
-- **8 GB 显存档、KV in RAM**：未做。
+- ~~**8 GB 显存档、KV in RAM**：未做。~~ **8 GB 显存档已做（2026-10-22）**：见 §9 与 `docs/8G档-配方与读数-20261022.md`；2K decode 58.35（带 profile 68.23）tok/s，质量 7/9 与全常驻逐位相同。**KV in RAM 仍未做**（`--kv-resident` 判死：静默丢上下文）。
 - **自然长任务循环**：把 DSH 记录的 prompt 原样回放（greedy / 0.6）都不循环，**触发条件未定位**。
 
 ## 8. 出处
@@ -136,3 +140,31 @@ docs/      交接、循环诊断、精确线说明、DSH 接入、知识卡 0009
 - 引擎：[PolyStrata](https://github.com/Niko1221/Strata)（Strata 的 `poly` 分支 fork）0.1.44.1，本仓只带补丁，不带整棵树。
 - 模型：[InternScience/Sage-A1.5](https://huggingface.co/InternScience/Sage-A1.5)，本仓不带权重。
 - 读数：本机实测，记录见 `docs/`；每条都标了证据等级与「怎么变红」。
+
+## 9. 8 GB 显存档（2026-10-22 新增）
+
+用 `--vram-reserve-mib 24568` 把 32760 MiB 的卡压成 **8192 MiB 档**：专家留在系统内存、按画像排序的
+专家缓存上卡、没命中的就地交给 CPU 池算。**与 32GB 精确线同一个 exe，零改码。**
+
+| 项 | 8 GB 档（A 级） | 对照 32 GB 全常驻 |
+|---|---|---|
+| prefill 2K / 8K | **1918.3 / 3388.2 tok/s** | 8K 3478.1（差 **2.6%**） |
+| decode 2K（无 profile / 有 profile） | **58.35 / 68.23 tok/s** | 193.10 |
+| 专家驻留 | **2396 / 10240（4.3 GiB）** | 10240（18.7 GiB） |
+| 命中率 | 67.2% → **74.5%** | 100% |
+| 短问（10–34 token） | 41–56 tok/s，CPU 专家 **11–14 ms/token** | 175–177 tok/s |
+
+**决定性开关是 `STRATA_PIN_ARENA_GIB=20`**：不设时 prefill 只有 939 tok/s（同 argv，仅差这一项）。
+
+```powershell
+$env:STRATA_PIN_ARENA_GIB = '20'
+strata-poly.exe --model <gguf> --vram-reserve-mib 24568 --max-context 12288 `
+  --window 1 --lookup 0 --expert-profile profile\sage-profile-2k.bin `
+  --tokens-file <ids> --max-new 128
+```
+
+**质量**：9 题问答（常识 + 算术，答案确定）里 **7/9 前 64 token 与 32 GB 全常驻档逐位相同**，6/9 直接答对。
+自我问答复读在全常驻档也逐字复现 ⇒ **不是流式造成的，智力无损失**。
+
+逐参数说明、换卡公式、9 条口径陷阱：`docs/8G档-配方与读数-20261022.md`、`docs/8G档-陷阱与口径-20261022.md`。
+启动器：`scripts/run-8g.ps1 <log-tag>`。
